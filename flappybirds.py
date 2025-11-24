@@ -6,6 +6,12 @@ import random
 GAME_WIDTH = 360
 GAME_HEIGHT = 640
 
+#Estados del juego
+MENU = 0
+JUGANDO = 1
+PERDIDO = 2
+estado = MENU
+
 # Clase pájaro
 bird_x = GAME_WIDTH / 8
 bird_y = GAME_HEIGHT / 2
@@ -47,30 +53,55 @@ gravedad = 0.4
 puntuacion = 0
 game_over = False
 
-def draw():
+def reiniciar_juego():
+    global bird, tuberias, velocidad_y, puntuacion
+    bird.y = bird_y
+    tuberias.clear()
+    velocidad_y = 0
+    puntuacion = 0
+
+def draw_menu(window):
+    window.blit(background_image, (0, 0))
+    font_title = pygame.font.SysFont("Comic Sans MS", 40)
+    font_sub = pygame.font.SysFont("Comic Sans MS", 30)
+
+    title = font_title.render(" FLAPPY BIRD", True, "white")
+    start = font_sub.render("Presiona ESPACIO", True, "yellow")
+
+    window.blit(title, (40, 200))
+    window.blit(start, (50, 300))
+
+def draw_game(window):
     window.blit(background_image, (0, 0))
     window.blit(bird.img, bird)
 
     for tuberia in tuberias:
         window.blit(tuberia.img, tuberia)
 
-    text_str = str(int(puntuacion))
-    if game_over:
-        text_str = "Perdiste: " + text_str
-
     text_font = pygame.font.SysFont("Comic Sans MS", 45)
-    text_render = text_font.render(text_str, True, "white")
+    text_render = text_font.render(str(int(puntuacion)), True, "white")
     window.blit(text_render, (5, 0))
+
+def draw_game_over(window):
+    draw_game(window)
+    font_over = pygame.font.SysFont("Comic Sans MS", 45)
+    font_sub = pygame.font.SysFont("Comic Sans MS", 20)
+
+    text = font_over.render("¡PERDISTE! ", True, "red")
+    retry = font_sub.render(" Presiona ESPACIO para reiniciar", True, "yellow")
+
+    window.blit(text, (60, 250))
+    window.blit(retry, (20, 320))
 
 
 def move():
-    global velocidad_y, puntuacion, game_over
+    global velocidad_y, puntuacion, estado
     velocidad_y += gravedad
     bird.y += velocidad_y
     bird.y = max(bird.y, 0)
 
     if bird.y > GAME_HEIGHT:
-        game_over = True
+        estado = PERDIDO
         return
 
     for tuberia in tuberias:
@@ -81,7 +112,7 @@ def move():
             tuberia.passed = True
 
         if bird.colliderect(tuberia):
-            game_over = True
+            estado = PERDIDO
             return
 
     while len(tuberias) > 0 and tuberias[0].x < -tuberia_width:
@@ -112,23 +143,32 @@ while True:
         if event.type == pygame.QUIT:
             pygame.quit()
             exit()
-        
-        if event.type == temporizador_tuberias and not game_over:
-            crear_tuberias()
-        
+
         if event.type == pygame.KEYDOWN:
             if event.key in (pygame.K_SPACE, pygame.K_x, pygame.K_UP):
-                velocidad_y = -6
 
-                if game_over:
-                    bird.y = bird_y
-                    tuberias.clear()
-                    puntuacion = 0
-                    game_over = False
+                if estado == MENU:
+                    reiniciar_juego()
+                    estado = JUGANDO
+
+                elif estado == JUGANDO:
+                    velocidad_y = -6
+
+                elif estado == PERDIDO:
+                    reiniciar_juego()
+                    estado = MENU
+
+        if event.type == temporizador_tuberias and estado == JUGANDO:
+            crear_tuberias()
     
-    if not game_over:
+    if estado == JUGANDO:
         move()
-    
-    draw()
+    if estado == MENU:
+        draw_menu(window)
+    elif estado == JUGANDO:
+        draw_game(window)
+    elif estado == PERDIDO:
+        draw_game_over(window)
+        
     pygame.display.update()
     clock.tick(60)

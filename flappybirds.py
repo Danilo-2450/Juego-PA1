@@ -164,17 +164,25 @@ def draw_game(window):
     for tuberia in tuberias:
         window.blit(tuberia.img, tuberia)
 
-    text_font = pygame.font.SysFont("Comic Sans MS", 45)
+    # --- Puntuación ---
+    text_font = pygame.font.SysFont("Comic Sans MS", 60)
     text_render = text_font.render(str(int(puntuacion)), True, "white")
-    window.blit(text_render, (5, 0))
+    window.blit(text_render, (20, 20))
+
 
 
 def draw_game_over(window):
     draw_game(window)
     font_over = pygame.font.Font("FlappyBirdy.ttf", 80)
-    text = font_over.render("GAME OVER ", True, "red")
-    window.blit(text, (60, 200))
-    button_play.rect.y = 320
+    text = font_over.render("GAME OVER", True, "red")
+    window.blit(text, (70, 180))
+
+    # --- Puntuación final ---
+    font_score = pygame.font.SysFont("Comic Sans MS", 50)
+    score_text = font_score.render(f"Puntaje: {int(puntuacion)}", True, "Black")
+    window.blit(score_text, (50, 480))
+
+    button_play.rect.y = 360
     button_play.draw(window)
 
 

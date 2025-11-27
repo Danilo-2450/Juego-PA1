@@ -1,26 +1,25 @@
 import pygame
 import random
-import os
 from sys import exit
 
-# -------------------- Inicialización --------------------
+# ===================== Inicialización =====================
 pygame.init()
 clock = pygame.time.Clock()
 
-# -------------------- Pantalla --------------------
+# ===================== Configuración de pantalla =====================
 GAME_WIDTH = 360
 GAME_HEIGHT = 640
 window = pygame.display.set_mode((GAME_WIDTH, GAME_HEIGHT))
-pygame.display.set_caption("Flappy Bird - Modo Amarillo/Azul/Intercalado")
+pygame.display.set_caption("Flappy Bird Mejorado")
 
-# -------------------- Estados --------------------
+# ===================== Estados =====================
 MENU = 0
 JUGANDO = 1
 PERDIDO = 2
 PAUSA = 3
 estado = MENU
 
-# -------------------- Parámetros --------------------
+# ===================== Parámetros =====================
 FPS = 60
 bird_width = 34
 bird_height = 24
@@ -30,29 +29,82 @@ tuberia_x = GAME_WIDTH
 tuberia_y = 0
 velocidad_x = -2
 
-# -------------------- Récord --------------------
+# ===================== Archivo de récord =====================
 RECORD_FILE = "record.txt"
+
 def cargar_record():
     try:
         with open(RECORD_FILE, "r") as f:
             return int(f.read())
-    except Exception:
+    except:
         return 0
 
 def guardar_record(score):
     try:
         with open(RECORD_FILE, "w") as f:
             f.write(str(int(score)))
-    except Exception as e:
-        print("Error guardando récord:", e)
+    except:
+        pass
 
 record = cargar_record()
 
-# -------------------- Clases --------------------
+# ===================== Carga segura de imágenes =====================
+def safe_load(path, size=None, alpha=True):
+    try:
+        img = pygame.image.load(path)
+        img = img.convert_alpha() if alpha else img.convert()
+        if size:
+            img = pygame.transform.scale(img, size)
+        return img
+    except:
+        surf = pygame.Surface(size if size else (50, 50), pygame.SRCALPHA)
+        surf.fill((200, 0, 200))
+        return surf
+
+# Fondo
+background_image = safe_load("sky.png", (GAME_WIDTH, GAME_HEIGHT), alpha=False)
+
+# Frames amarillo
+frames_yellow = [
+    safe_load("bird_yellow1.png", (bird_width, bird_height)),
+    safe_load("bird_yellow2.png", (bird_width, bird_height)),
+    safe_load("bird_yellow3.png", (bird_width, bird_height))
+]
+
+# Frames azul
+frames_blue = [
+    safe_load("bird_blue1.png", (bird_width, bird_height)),
+    safe_load("bird_blue2.png", (bird_width, bird_height)),
+    safe_load("bird_blue3.png", (bird_width, bird_height))
+]
+
+# Tuberías
+tuberia_sup_img = safe_load("tuberia_superior.png", (tuberia_width, tuberia_height))
+tuberia_inf_img = safe_load("tuberia_inferior.png", (tuberia_width, tuberia_height))
+
+# ===================== Modos =====================
+modo = "intercalated"
+
+def construir_sprites(m):
+    if m == "yellow":
+        return frames_yellow[:]
+    if m == "blue":
+        return frames_blue[:]
+
+    seq = []
+    for a, b in zip(frames_yellow, frames_blue):
+        seq.append(a)
+        seq.append(b)
+    return seq
+
+sprites_bird = construir_sprites(modo)
+frame_index = 0
+
+# ===================== Clases =====================
 class Bird:
     def __init__(self, img, x, y, w, h):
         self.img = img
-        self.rect = pygame.Rect(int(x), int(y), w, h)
+        self.rect = pygame.Rect(x, y, w, h)
         self.x_float = float(x)
         self.y_float = float(y)
         self.vel_y = 0.0
@@ -63,340 +115,233 @@ class Bird:
         self.rect.y = int(self.y_float)
 
     def update_angle(self):
-        # ángulo proporcional a la velocidad vertical (clamp)
-        ang = -self.vel_y * 4  # ajustar sensibilidad
-        if ang > 25: ang = 25
-        if ang < -25: ang = -25
-        self.angle = ang
+        ang = -self.vel_y * 4
+        self.angle = max(-25, min(25, ang))
 
-    def apply_gravity(self, gravity):
-        self.vel_y += gravity
+    def apply_gravity(self, grav):
+        self.vel_y += grav
         self.y_float += self.vel_y
-        # evitar salirse por arriba
+
         if self.y_float < 0:
             self.y_float = 0
             self.vel_y = 0
+
         self.update_angle()
         self.update_rect()
 
-    def jump(self, jump_speed):
-        self.vel_y = jump_speed
+    def jump(self, speed):
+        self.vel_y = speed
 
     def check_boundary(self, height):
-        # devuelve True si tocó el suelo (se considera fuera)
         return self.rect.y > height - 10
 
-    def draw(self, surface):
-        # rotar imagen alrededor del centro
-        if self.img is None:
-            return
+    def draw(self, surf):
         rotated = pygame.transform.rotate(self.img, self.angle)
         new_rect = rotated.get_rect(center=self.rect.center)
-        surface.blit(rotated, new_rect)
+        surf.blit(rotated, new_rect)
 
 class Tuberia(pygame.Rect):
-    def __init__(self, img, x, y, w, h):
-        pygame.Rect.__init__(self, int(x), int(y), int(w), int(h))
+    def __init__(self, img, x, y):
+        super().__init__(x, y, tuberia_width, tuberia_height)
         self.img = img
         self.passed = False
 
 class Button:
-    def __init__(self, x, y, width, height, bg_color=(150,150,150), text="", font=None, text_color=(255,255,255)):
-        self.rect = pygame.Rect(x, y, width, height)
-        self.bg_color = bg_color
+    def __init__(self, x, y, w, h, color, text, font, text_color):
+        self.rect = pygame.Rect(x, y, w, h)
+        self.color = color
         self.text = text
         self.font = font
         self.text_color = text_color
 
-    def draw(self, surface):
-        pygame.draw.rect(surface, self.bg_color, self.rect)
-        pygame.draw.rect(surface, (0,0,0), self.rect, 2)
-        if self.text and self.font:
-            text_surf = self.font.render(self.text, True, self.text_color)
-            text_rect = text_surf.get_rect(center=self.rect.center)
-            surface.blit(text_surf, text_rect)
+    def draw(self, surf):
+        pygame.draw.rect(surf, self.color, self.rect)
+        pygame.draw.rect(surf, (0, 0, 0), self.rect, 2)
+        t = self.font.render(self.text, True, self.text_color)
+        surf.blit(t, t.get_rect(center=self.rect.center))
 
     def is_clicked(self, pos, event):
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            return self.rect.collidepoint(pos)
-        return False
+        return event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and self.rect.collidepoint(pos)
 
-# -------------------- Carga de recursos (con fallback) --------------------
-def safe_load_image(path, size=None, alpha=True):
-    try:
-        if alpha:
-            img = pygame.image.load(path).convert_alpha()
-        else:
-            img = pygame.image.load(path).convert()
-        if size:
-            img = pygame.transform.scale(img, size)
-        return img
-    except Exception:
-        # superficie de reemplazo (para no romper si falta archivo)
-        surf = pygame.Surface(size if size else (50,50), pygame.SRCALPHA)
-        surf.fill((200,0,200))
-        return surf
-
-# background
-background_image = safe_load_image("sky.png", (GAME_WIDTH, GAME_HEIGHT), alpha=False)
-
-# frames por color (intenta cargar, si no existen usa sustitutos)
-frames_yellow = [
-    safe_load_image("bird_yellow1.png", (bird_width, bird_height)),
-    safe_load_image("bird_yellow2.png", (bird_width, bird_height)),
-    safe_load_image("bird_yellow3.png", (bird_width, bird_height))
-]
-frames_blue = [
-    safe_load_image("bird_blue1.png", (bird_width, bird_height)),
-    safe_load_image("bird_blue2.png", (bird_width, bird_height)),
-    safe_load_image("bird_blue3.png", (bird_width, bird_height))
-]
-
-# tuberías
-tuberia_superior_image = safe_load_image("tuberia_superior.png", (tuberia_width, tuberia_height))
-tuberia_inferior_image = safe_load_image("tuberia_inferior.png", (tuberia_width, tuberia_height))
-
-# -------------------- Modos de juego --------------------
-# "yellow", "blue", "intercalated"
-modo_seleccionado = "intercalated"
-
-def construir_sprites_para_modo(modo):
-    if modo == "yellow":
-        return frames_yellow[:]
-    elif modo == "blue":
-        return frames_blue[:]
-    else:
-        seq = []
-        for i in range(len(frames_yellow)):
-            seq.append(frames_yellow[i])
-            seq.append(frames_blue[i])
-        return seq
-
-sprites_bird = construir_sprites_para_modo(modo_seleccionado)
-indice_sprite = 0
-
-# -------------------- Variables del juego --------------------
-bird_x = GAME_WIDTH / 8
-bird_y = GAME_HEIGHT / 2
-bird = Bird(sprites_bird[indice_sprite], bird_x, bird_y, bird_width, bird_height)
+# ===================== Variables del juego =====================
+bird = Bird(sprites_bird[frame_index], GAME_WIDTH/8, GAME_HEIGHT/2, bird_width, bird_height)
 tuberias = []
 puntuacion = 0.0
 
 # Timers
-temporizador_tuberias = pygame.USEREVENT + 0
-pygame.time.set_timer(temporizador_tuberias, 1500)
-ANIM_EVENT = pygame.USEREVENT + 5
-pygame.time.set_timer(ANIM_EVENT, 150)  # animación cada 150 ms
+SPAWN_PIPE = pygame.USEREVENT + 1
+ANIM = pygame.USEREVENT + 2
+pygame.time.set_timer(SPAWN_PIPE, 1500)
+pygame.time.set_timer(ANIM, 150)
 
-# Fuentes y botones
+# ===================== Fuentes y botones =====================
 font_title = pygame.font.SysFont("Comic Sans MS", 40)
 font_button = pygame.font.SysFont("Comic Sans MS", 25)
+font_small = pygame.font.SysFont("Comic Sans MS", 22)
 font_score = pygame.font.SysFont("Comic Sans MS", 45)
-font_small = pygame.font.SysFont("Comic Sans MS", 24)
 
-button_width = 150
-button_height = 50
-button_x = GAME_WIDTH // 2 - button_width // 2
-button_y = 300
-button_play = Button(button_x, button_y, button_width, button_height, (255,165,0), "Jugar", font_button, (0,0,0))
+button_play = Button(GAME_WIDTH//2 - 75, 300, 150, 50, (255,165,0), "Jugar", font_button, (0,0,0))
 
-# Modo buttons
-mode_btn_w = 110
-mode_btn_h = 40
-mode_btn_y = 200
-mode_btn_yellow = Button(20, mode_btn_y, mode_btn_w, mode_btn_h, (255,215,0), "Amarillo", font_small, (0,0,0))
-mode_btn_blue   = Button(130, mode_btn_y, mode_btn_w, mode_btn_h, (30,144,255), "Azul", font_small, (255,255,255))
-mode_btn_inter  = Button(240, mode_btn_y, mode_btn_w, mode_btn_h, (120,120,120), "Intercalado", font_small, (255,255,255))
+mode_btn_yellow = Button(20, 200, 110, 40, (255,215,0), "Amarillo", font_small, (0,0,0))
+mode_btn_blue   = Button(130, 200, 110, 40, (30,144,255), "Azul", font_small, (255,255,255))
+mode_btn_inter  = Button(240, 200, 110, 40, (120,120,120), "Intercalado", font_small, (255,255,255))
 
-# -------------------- Funciones de lógica --------------------
-def reiniciar_juego():
-    global bird, tuberias, puntuacion, indice_sprite
-    bird = Bird(sprites_bird[indice_sprite], bird_x, bird_y, bird_width, bird_height)
+# ===================== Lógica =====================
+def reiniciar():
+    global bird, tuberias, puntuacion
     tuberias.clear()
-    puntuacion = 0.0
+    puntuacion = 0
+    frame_index = 0
+    return Bird(sprites_bird[0], GAME_WIDTH/8, GAME_HEIGHT/2, bird_width, bird_height)
 
 def crear_tuberias():
-    random_y = tuberia_y - tuberia_height / 4 - random.random() * (tuberia_height / 2)
-    espacio = GAME_HEIGHT / 4
-    superior = Tuberia(tuberia_superior_image, tuberia_x, int(random_y), tuberia_width, tuberia_height)
-    inferior = Tuberia(tuberia_inferior_image, tuberia_x, int(random_y + tuberia_height + espacio), tuberia_width, tuberia_height)
-    tuberias.append(superior)
-    tuberias.append(inferior)
+    offset = random.randint(-150, 150)
+    y_top = -200 + offset
+    y_bottom = y_top + tuberia_height + 150
 
-def move():
+    tuberias.append(Tuberia(tuberia_sup_img, tuberia_x, y_top))
+    tuberias.append(Tuberia(tuberia_inf_img, tuberia_x, y_bottom))
+
+def mover():
     global puntuacion, estado, record
+
     bird.apply_gravity(0.4)
+
     if bird.check_boundary(GAME_HEIGHT):
         if puntuacion > record:
-            record = int(puntuacion)
-            guardar_record(record)
+            guardar_record(int(puntuacion))
         estado = PERDIDO
         return
 
-    for tuberia in tuberias:
-        tuberia.x += velocidad_x
-        if not tuberia.passed and bird.rect.x > tuberia.x + tuberia.width:
+    for t in tuberias:
+        t.x += velocidad_x
+
+        if not t.passed and bird.rect.x > t.x + t.width:
+            t.passed = True
             puntuacion += 0.5
-            tuberia.passed = True
-        if bird.rect.colliderect(tuberia):
+
+        if bird.rect.colliderect(t):
             if puntuacion > record:
-                record = int(puntuacion)
-                guardar_record(record)
+                guardar_record(int(puntuacion))
             estado = PERDIDO
             return
 
-    # eliminar tuberías fuera de pantalla
-    while len(tuberias) > 0 and tuberias[0].x < -tuberia_width:
+    if tuberias and tuberias[0].x < -tuberia_width:
         tuberias.pop(0)
 
-# -------------------- Dibujado --------------------
-def draw_menu(window):
-    window.blit(background_image, (0, 0))
-    title = font_title.render(" FLAPPY BIRD", True, (255,255,255))
-    window.blit(title, (40, 100))
+# ===================== Dibujado =====================
+def draw_menu():
+    window.blit(background_image, (0,0))
+    window.blit(font_title.render("FLAPPY BIRD", True, (255,255,255)), (40, 100))
 
-    # Botón jugar
-    button_play.rect.y = button_y
-    button_play.draw(window)
-
-    # Texto y botones de modo
-    text_select = font_small.render("Modo de juego (elige uno):", True, (255,255,255))
-    window.blit(text_select, (30, 160))
+    window.blit(font_small.render("Modo de juego:", True, (255,255,255)), (30, 160))
     mode_btn_yellow.draw(window)
     mode_btn_blue.draw(window)
     mode_btn_inter.draw(window)
 
-    # Mostrar modo actual abajo
-    mode_text = font_small.render(f"Modo actual: {modo_seleccionado}", True, (255,255,255))
-    window.blit(mode_text, (20, 260))
+    window.blit(font_small.render(f"Modo actual: {modo}", True, (255,255,255)), (20, 260))
 
-def draw_game(window):
-    window.blit(background_image, (0, 0))
-    for tuberia in tuberias:
-        # blit acepta rect, así se posiciona correctamente
-        window.blit(tuberia.img, (tuberia.x, tuberia.y))
+    button_play.draw(window)
+
+def draw_game():
+    window.blit(background_image, (0,0))
+
+    for t in tuberias:
+        window.blit(t.img, (t.x, t.y))
+
     bird.draw(window)
-    text_render = font_score.render(str(int(puntuacion)), True, (255,255,255))
-    window.blit(text_render, (5, 0))
-    record_text = font_small.render(f"Récord: {record}", True, (255,255,255))
-    window.blit(record_text, (GAME_WIDTH - 120, 8))
 
-def draw_game_over(window):
-    draw_game(window)
-    font_over = pygame.font.SysFont("Comic Sans MS", 45)
-    text = font_over.render("¡PERDISTE!", True, (255,0,0))
-    window.blit(text, (60, 150))
-    font_info = pygame.font.SysFont("Comic Sans MS", 28)
-    punt_text = font_info.render(f"Puntuación: {int(puntuacion)}", True, (255,255,255))
-    window.blit(punt_text, (80, 220))
-    rec_text = font_info.render(f"Récord: {record}", True, (255,255,255))
-    window.blit(rec_text, (80, 260))
+    window.blit(font_score.render(str(int(puntuacion)), True, (255,255,255)), (5,0))
+    window.blit(font_small.render(f"Record: {record}", True, (255,255,255)), (220, 5))
+
+def draw_perdido():
+    draw_game()
+    window.blit(font_title.render("¡PERDISTE!", True, (255,0,0)), (65, 200))
     button_play.rect.y = 320
     button_play.draw(window)
 
-def draw_pause(window):
-    draw_game(window)
-    font_pause = pygame.font.SysFont("Comic Sans MS", 60)
-    text = font_pause.render("PAUSA", True, (255,255,0))
-    window.blit(text, (90, 260))
-    hint = font_small.render("Presiona P para continuar", True, (255,255,255))
-    window.blit(hint, (70, 330))
+def draw_pause():
+    draw_game()
+    window.blit(font_title.render("PAUSA", True, (255,255,0)), (100, 260))
 
-# -------------------- Loop principal --------------------
+# ===================== Bucle principal =====================
 running = True
 while running:
-    mouse_pos = pygame.mouse.get_pos()
+
+    mouse = pygame.mouse.get_pos()
+
     for event in pygame.event.get():
+
         if event.type == pygame.QUIT:
-            if puntuacion > record:
-                guardar_record(int(puntuacion))
             pygame.quit()
             exit()
 
-        # Temporizador para crear tuberías (solo cuando se juega)
-        if event.type == temporizador_tuberias and estado == JUGANDO:
+        if event.type == SPAWN_PIPE and estado == JUGANDO:
             crear_tuberias()
 
-        # Timer de animación: actualizar índice y la imagen del pájaro
-        if event.type == ANIM_EVENT:
-            if len(sprites_bird) > 0:
-                indice_sprite = (indice_sprite + 1) % len(sprites_bird)
-                # actualizar la imagen del pájaro manteniendo referencia
-                try:
-                    bird.img = sprites_bird[indice_sprite]
-                except Exception:
-                    pass
+        if event.type == ANIM:
+            frame_index = (frame_index + 1) % len(sprites_bird)
+            bird.img = sprites_bird[frame_index]
 
-        # Clicks en menú y pantalla de perdido
+        # -------------------- MENÚ y PERDIDO --------------------
         if estado in (MENU, PERDIDO):
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                if button_play.is_clicked(mouse_pos, event):
-                    if estado == MENU:
-                        reiniciar_juego()
-                        estado = JUGANDO
-                    elif estado == PERDIDO:
-                        reiniciar_juego()
-                        estado = MENU
+            if button_play.is_clicked(mouse, event):
+                bird = reiniciar()
+                estado = JUGANDO
 
-                # Selección de modo desde el menú
-                if estado == MENU:
-                    if mode_btn_yellow.is_clicked(mouse_pos, event):
-                        modo_seleccionado = "yellow"
-                        sprites_bird = construir_sprites_para_modo(modo_seleccionado)
-                        indice_sprite = 0
-                        bird.img = sprites_bird[indice_sprite]
-                    if mode_btn_blue.is_clicked(mouse_pos, event):
-                        modo_seleccionado = "blue"
-                        sprites_bird = construir_sprites_para_modo(modo_seleccionado)
-                        indice_sprite = 0
-                        bird.img = sprites_bird[indice_sprite]
-                    if mode_btn_inter.is_clicked(mouse_pos, event):
-                        modo_seleccionado = "intercalated"
-                        sprites_bird = construir_sprites_para_modo(modo_seleccionado)
-                        indice_sprite = 0
-                        bird.img = sprites_bird[indice_sprite]
+            if estado == MENU:
+                if mode_btn_yellow.is_clicked(mouse, event):
+                    modo = "yellow"
+                    sprites_bird = construir_sprites(modo)
+                if mode_btn_blue.is_clicked(mouse, event):
+                    modo = "blue"
+                    sprites_bird = construir_sprites(modo)
+                if mode_btn_inter.is_clicked(mouse, event):
+                    modo = "intercalated"
+                    sprites_bird = construir_sprites(modo)
 
-        # Teclado
+        # -------------------- TECLAS --------------------
         if event.type == pygame.KEYDOWN:
-            if event.key in (pygame.K_SPACE, pygame.K_x, pygame.K_UP):
+
+            if event.key in (pygame.K_SPACE, pygame.K_UP):
                 if estado == MENU:
-                    reiniciar_juego()
+                    bird = reiniciar()
                     estado = JUGANDO
                 elif estado == JUGANDO:
                     bird.jump(-6)
                 elif estado == PERDIDO:
-                    reiniciar_juego()
                     estado = MENU
+
             if event.key == pygame.K_p:
                 if estado == JUGANDO:
                     estado = PAUSA
                 elif estado == PAUSA:
                     estado = JUGANDO
-            # Tecla C: alternar rápidamente entre modos
+
             if event.key == pygame.K_c:
-                if modo_seleccionado == "yellow":
-                    modo_seleccionado = "blue"
-                elif modo_seleccionado == "blue":
-                    modo_seleccionado = "intercalated"
+                if modo == "yellow":
+                    modo = "blue"
+                elif modo == "blue":
+                    modo = "intercalated"
                 else:
-                    modo_seleccionado = "yellow"
-                sprites_bird = construir_sprites_para_modo(modo_seleccionado)
-                indice_sprite = 0
-                bird.img = sprites_bird[indice_sprite]
+                    modo = "yellow"
+                sprites_bird = construir_sprites(modo)
+                frame_index = 0
+                bird.img = sprites_bird[frame_index]
 
-    # Lógica solo si está jugando
+    # -------------------- Lógica --------------------
     if estado == JUGANDO:
-        move()
+        mover()
 
-    # Dibujado por estado
+    # -------------------- Dibujado --------------------
     if estado == MENU:
-        draw_menu(window)
+        draw_menu()
     elif estado == JUGANDO:
-        draw_game(window)
+        draw_game()
     elif estado == PERDIDO:
-        draw_game_over(window)
+        draw_perdido()
     elif estado == PAUSA:
-        draw_pause(window)
+        draw_pause()
 
     pygame.display.update()
     clock.tick(FPS)

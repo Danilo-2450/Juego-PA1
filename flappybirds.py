@@ -172,7 +172,7 @@ def draw_game(window):
 def draw_game_over(window):
     draw_game(window)
     font_over = pygame.font.SysFont("Comic Sans MS", 45)
-    text = font_over.render("¡PERDISTE! ", True, "red")
+    text = font_over.render("GAME OVER ", True, "red")
     window.blit(text, (60, 200))
     button_play.rect.y = 320
     button_play.draw(window)

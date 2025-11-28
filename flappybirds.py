@@ -134,7 +134,7 @@ background_image = pygame.image.load("sky.png")
 bird_width = 34
 bird_height = 24
 
-bird_image = pygame.image.load("Flappybirds.png")
+bird_image = pygame.image.load("Flappybird.png")
 bird_image = pygame.transform.scale(bird_image, (bird_width, bird_height))
 
 tuberia_superior_image = pygame.image.load("tuberia_superior.png")
